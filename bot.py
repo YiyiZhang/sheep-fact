@@ -1,7 +1,9 @@
 """Discord bot that DMs you a different sheep fact every day.
 
 python bot.py          stay running and send a fact daily at SEND_TIME
-python bot.py --once   send one fact now and exit (used by GitHub Actions)
+python bot.py --once   send one fact now and exit
+python bot.py --daily  send one fact if it's past SEND_TIME and none was sent
+                       today, then exit (used by GitHub Actions)
 """
 
 import datetime
@@ -29,17 +31,30 @@ FACTS_FILE = HERE / "facts.txt"
 STATE_FILE = HERE / "state.json"
 
 
+def load_state():
+    return json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {}
+
+
+def today():
+    return datetime.datetime.now(TZ).date().isoformat()
+
+
+def is_due():
+    now = datetime.datetime.now(TZ)
+    return now.time() >= SEND_AT.replace(tzinfo=None) and load_state().get("last_sent") != today()
+
+
 def next_fact():
     """Pop a fact from a shuffled queue so none repeat until all have been sent."""
     facts = [line.strip() for line in FACTS_FILE.read_text().splitlines() if line.strip()]
-    state = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {}
+    state = load_state()
     # Drop anything that was removed from facts.txt since the queue was built.
     queue = [f for f in state.get("queue", []) if f in facts]
     if not queue:
         queue = facts[:]
         random.shuffle(queue)
     fact = queue.pop()
-    STATE_FILE.write_text(json.dumps({"queue": queue}, indent=2))
+    STATE_FILE.write_text(json.dumps({"last_sent": today(), "queue": queue}, indent=2))
     return fact
 
 
@@ -76,7 +91,12 @@ class SheepBot(discord.Client):
 
 
 if __name__ == "__main__":
-    if "--once" in sys.argv or "--test" in sys.argv:
+    if "--daily" in sys.argv:
+        if is_due():
+            asyncio.run(send_once())
+        else:
+            print("Not sending: already sent today, or it's before SEND_TIME.")
+    elif "--once" in sys.argv or "--test" in sys.argv:
         asyncio.run(send_once())
     else:
         SheepBot().run(TOKEN)
