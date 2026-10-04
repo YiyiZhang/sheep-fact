@@ -2,11 +2,11 @@ name: Daily sheep fact
 
 on:
   schedule:
-    # GitHub schedules are in UTC and ignore daylight saving time, so run at
-    # both 14:00 and 15:00 UTC. The first step only lets the run that lands
-    # at 10am New York time through.
-    - cron: "0 13 * * *"
-    - cron: "0 14 * * *"
+    # GitHub schedules are in UTC, ignore daylight saving time and often start
+    # late, so check a few times each morning. The bot sends on the first run
+    # at or after 11am New York time and skips the rest.
+    - cron: "7 15-19 * * *"
+  # "Run workflow" button: always sends a fact, for testing.
   workflow_dispatch:
 
 permissions:
@@ -15,28 +15,19 @@ permissions:
 jobs:
   send:
     runs-on: ubuntu-latest
+    env:
+      DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+      DISCORD_USER_ID: ${{ secrets.DISCORD_USER_ID }}
+      TIMEZONE: America/New_York
+      SEND_TIME: "11:00"
     steps:
-      - name: Only send at 10am Eastern
-        id: due
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$(TZ=America/New_York date +%H)" = "10" ]; then
-            echo "send=true" >> "$GITHUB_OUTPUT"
-          fi
-      - if: steps.due.outputs.send == 'true'
-        uses: actions/checkout@v4
-      - if: steps.due.outputs.send == 'true'
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - if: steps.due.outputs.send == 'true'
-        run: pip install -r requirements.txt
-      - if: steps.due.outputs.send == 'true'
-        run: python bot.py --once
-        env:
-          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
-          DISCORD_USER_ID: ${{ secrets.DISCORD_USER_ID }}
+      - run: pip install -r requirements.txt
+      - run: python bot.py ${{ github.event_name == 'workflow_dispatch' && '--once' || '--daily' }}
       - name: Remember which facts have been sent
-        if: steps.due.outputs.send == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898729+github-actions[bot]@users.noreply.github.com"
