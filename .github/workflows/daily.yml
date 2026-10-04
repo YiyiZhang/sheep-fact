@@ -5,8 +5,8 @@ on:
     # GitHub schedules are in UTC and ignore daylight saving time, so run at
     # both 14:00 and 15:00 UTC. The first step only lets the run that lands
     # at 10am New York time through.
+    - cron: "0 13 * * *"
     - cron: "0 14 * * *"
-    - cron: "0 15 * * *"
   workflow_dispatch:
 
 permissions:
